@@ -1,110 +1,53 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ghost Proxy</title>
-<style>
-*{box-sizing:border-box}
-body{
- margin:0;background:#101016;color:white;
- font-family:Arial,sans-serif;
-}
-header{
- padding:22px 6%;border-bottom:1px solid #292936;
- display:flex;justify-content:space-between;align-items:center;
-}
-.logo{font-size:23px;font-weight:bold}
-.logo span{color:#a855f7}
-main{max-width:1100px;margin:65px auto;padding:20px}
-h1{text-align:center;font-size:38px}
-.subtitle{text-align:center;color:#999;margin-bottom:35px}
-.search{
- display:flex;gap:10px;background:#1b1b26;
- padding:10px;border:1px solid #343444;border-radius:14px;
-}
-input{
- flex:1;min-width:0;background:transparent;border:0;
- color:white;padding:12px;font-size:16px;outline:none;
-}
-button{
- background:#9333ea;color:white;border:0;
- padding:13px 22px;border-radius:9px;
- cursor:pointer;font-weight:bold;
-}
-.toolbar{display:flex;gap:9px;margin:20px 0}
-.toolbar button{background:#252535}
-.browser{
- background:#171720;border:1px solid #343444;
- border-radius:14px;overflow:hidden;
-}
-.browser-top{padding:14px;color:#aaa;border-bottom:1px solid #343444}
-iframe{width:100%;height:550px;border:0;background:white}
-.note{text-align:center;color:#777;font-size:12px;margin-top:20px}
-</style>
-</head>
-<body>
-<header>
- <div class="logo">👻 GHOST <span>PROXY</span></div>
- <span style="color:#999">Kameron's Ghost Vault</span>
-</header>
-<main>
- <h1>Browse the Web</h1>
- <p class="subtitle">A clean browsing experience.</p>
+const express = require("express");
+const app = express();
 
- <div class="search">
-  <input id="url" placeholder="Enter a website address...">
-  <button onclick="loadSite()">GO →</button>
- </div>
+app.use(express.static("public"));
 
- <div class="toolbar">
-  <button onclick="history.back()">←</button>
-  <button onclick="history.forward()">→</button>
-  <button onclick="reloadSite()">↻</button>
-  <button onclick="home()">⌂ Home</button>
-  <button onclick="fullscreen()">⛶ Fullscreen</button>
- </div>
+app.get("/api/check", async (req, res) => {
+    const url = req.query.url;
 
- <div class="browser" id="browser">
-  <div class="browser-top" id="status">Ready to browse</div>
-  <iframe id="frame" title="Website viewer"
-  sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
-  referrerpolicy="no-referrer"></iframe>
- </div>
- <p class="note">Some websites do not permit iframe embedding.</p>
-</main>
+    if (!url) {
+        return res.status(400).json({ error: "Missing URL" });
+    }
 
-<script>
-const allowed = ["example.com","www.example.com"];
-const frame = document.getElementById("frame");
-const input = document.getElementById("url");
+    try {
+        const parsed = new URL(url);
 
-function loadSite(){
- let value=input.value.trim();
- if(!value)return;
- if(!/^https?:\/\//i.test(value))value="https://"+value;
+        if (parsed.protocol !== "https:") {
+            return res.status(400).json({ error: "HTTPS required" });
+        }
 
- try{
-  const parsed=new URL(value);
-  if(!["https:"].includes(parsed.protocol))throw Error();
-  if(!allowed.includes(parsed.hostname)){
-   document.getElementById("status").textContent=
-   "This demo only permits approved websites.";
-   return;
-  }
-  frame.src=parsed.href;
-  document.getElementById("status").textContent=parsed.hostname;
- }catch(e){
-  document.getElementById("status").textContent="Invalid website address.";
- }
-}
-function reloadSite(){if(frame.src)frame.src=frame.src}
-function home(){frame.src="about:blank";input.value="";
- document.getElementById("status").textContent="Ready to browse";}
-function fullscreen(){
- document.getElementById("browser").requestFullscreen();
-}
-input.addEventListener("keydown",e=>{if(e.key==="Enter")loadSite()});
-</script>
-</body>
-</html>
+        const allowed = [
+            "example.com",
+            "www.example.com"
+        ];
+
+        if (!allowed.includes(parsed.hostname)) {
+            return res.status(403).json({
+                error: "Website not approved"
+            });
+        }
+
+        const response = await fetch(parsed.href, {
+            redirect: "error",
+            signal: AbortSignal.timeout(8000)
+        });
+
+        res.json({
+            accessible: response.ok,
+            status: response.status,
+            url: parsed.href
+        });
+
+    } catch (error) {
+        res.status(400).json({
+            error: "Could not access website"
+        });
+    }
+});
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+    console.log("Ghost Proxy running on port " + PORT);
+});
